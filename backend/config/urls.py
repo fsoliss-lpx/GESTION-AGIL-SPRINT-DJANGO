@@ -14,9 +14,13 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
+# backend/config/urls.py
 from django.contrib import admin
 from django.urls import path
+from django.contrib.auth import views as auth_views
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    # Ruta vacía para que el login sea lo primero que se vea
+    path('', auth_views.LoginView.as_view(template_name='login.html'), name='login'),
 ]

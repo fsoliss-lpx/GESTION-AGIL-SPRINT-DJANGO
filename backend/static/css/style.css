@@ -1,0 +1,33 @@
+/* backend/static/css/style.css */
+:root {
+    --unemi-naranja: #f39c12; /* Ajusta según el tono exacto si lo deseas */
+    --unemi-verde: #27ae60;
+    --fondo-gris: #f4f6f9;
+}
+
+body {
+    background-color: var(--fondo-gris);
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* Forzamos el diseño para escritorio como indica el alcance del proyecto */
+.desktop-container {
+    width: 1000px;
+    margin: 0 auto;
+}
+
+.login-card {
+    border-top: 5px solid var(--unemi-naranja);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.btn-unemi {
+    background-color: var(--unemi-verde);
+    color: white;
+    font-weight: bold;
+}
+
+.btn-unemi:hover {
+    background-color: #1e8449;
+    color: white;
+}
