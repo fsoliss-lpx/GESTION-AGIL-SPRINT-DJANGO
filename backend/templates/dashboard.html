@@ -76,13 +76,13 @@
                 </div>
                 <ul class="nav flex-column h-100">
                     <li class="nav-item">
-                        <a class="nav-link active" href="{% url 'core:dashboard' %}">📊 Dashboard</a>
+                        <a class="nav-link active" href="{% url 'core:dashboard' %}"> Dashboard</a>
                     </li>
                     
                     <!-- Apartado interactivo de Menciones en la pestaña lateral -->
                     <li class="nav-item">
                         <a class="nav-link d-flex justify-content-between align-items-center" data-bs-toggle="offcanvas" data-bs-target="#panelMenciones">
-                            <span>🔔 Menciones</span>
+                            <span> Menciones</span>
                             {% if menciones_count > 0 %}
                                 <span class="badge rounded-pill bg-danger animate-pulse" id="contador-menciones-burbuja">{{ menciones_count }}</span>
                             {% endif %}
@@ -110,12 +110,23 @@
                     {% endfor %}
                 {% endif %}
 
+                
                 <div class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-3">
-                    <h2 class="fw-bold" style="color: #1a253f;">Mis Proyectos</h2>
-                    <button type="button" class="btn btn-crear px-4" data-bs-toggle="modal" data-bs-target="#modalCrearProyecto">
-                        + Nuevo Proyecto
-                    </button>
-                </div>
+                  <h2 class="fw-bold" style="color: #1a253f;">Mis Proyectos</h2>
+                    <div class="d-flex gap-3 align-items-center">
+                     <!-- Botón de Creación -->
+                     <button type="button" class="btn btn-crear px-4" data-bs-toggle="modal" data-bs-target="#modalCrearProyecto">
+                     + Nuevo Proyecto
+                     </button>
+                     <!-- Formulario Seguro de Cierre de Sesión Rápido -->
+                     <form method="post" action="{% url 'logout' %}" class="m-0">
+                     {% csrf_token %}
+                     <button type="submit" class="btn btn-sm btn-outline-danger d-flex align-items-center gap-1 px-3 py-2 fw-semibold">
+                     Cerrar Sesión
+                     </button>
+                   </form>
+                 </div>
+               </div>
 
                 <!-- LISTA DE PROYECTOS VIGENTES -->
                 <div class="row">

@@ -130,3 +130,9 @@ LOGOUT_REDIRECT_URL = '/'
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+# --- BACKENDS DE AUTENTICACIÓN PERSONALIZADOS ---
+AUTHENTICATION_BACKENDS = [
+    'core.auth_backends.EmailBackend',         # Tu nuevo backend para correo UNEMI
+    'django.contrib.auth.backends.ModelBackend', # El backend estándar por defecto de Django
+]

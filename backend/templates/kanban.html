@@ -79,7 +79,14 @@
     <div class="kanban-header d-flex justify-content-between align-items-center shadow-sm">
         <div>
             <a href="{% url 'core:detalle_proyecto' proyecto.id %}" class="text-decoration-none text-muted small">← Volver al equipo</a>
-            <h4 class="project-title mb-0 mt-1 fw-bold">{{ proyecto.nombre }} <span class="badge bg-secondary fs-6 ms-2">Sprint 1</span></h4>
+            <!-- AHORA (DINÁMICO SEGÚN LA BASE DE DATOS) -->
+            <h4 class="project-title mb-0 mt-1 fw-bold">
+                {{ proyecto.nombre }} 
+                 <span class="badge bg-secondary fs-6 ms-2">
+                  {% if sprints.exists %}{{ sprints.first.nombre }}{% else %}Sprint Activo{% endif %}
+                 </span>
+            </h4>
+
             {% if proyecto.fecha_inicio and proyecto.fecha_fin %}
                 <small class="text-muted">Duración: {{ proyecto.fecha_inicio }} al {{ proyecto.fecha_fin }}</small>
             {% endif %}

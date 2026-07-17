@@ -1,7 +1,8 @@
 import json
 import re
 from django.shortcuts import render, redirect, get_object_or_404
-from django.db import models 
+from django.db import models
+from django.db import transaction 
 from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
@@ -11,28 +12,31 @@ from .forms import RegistroUsuarioForm
 
 
 def registro(request):
-    """Vista para que nuevos usuarios creen su cuenta y entren al sistema."""
+    """Vista para que nuevos usuarios creen su cuenta y vayan al login formal."""
     if request.method == 'POST':
         form = RegistroUsuarioForm(request.POST)
         if form.is_valid():
-            user = form.save()
-            login(request, user)
-            return redirect('core:dashboard')
+            form.save()  # Guardamos el usuario en la base de datos de forma segura
+            
+            # Mensaje flash opcional para avisarle al estudiante que ya puede ingresar
+            messages.success(request, "Cuenta institucional creada con éxito. Por favor, inicia sesión.")
+            
+            # Cambiamos la redirección para que vaya al Login en lugar del Dashboard
+            return redirect('login')  # O como tengas nombrada la ruta de login en tu urls.py (ej: 'core:login')
     else:
         form = RegistroUsuarioForm()
     
     return render(request, 'registro.html', {'form': form})
 
+
 @login_required
 def dashboard(request):
     """Vista principal del panel de control con separación de proyectos."""
-    # Proyectos base del usuario
     proyectos_base = Proyecto.objects.filter(
         models.Q(creador=request.user) | models.Q(miembros__usuario=request.user),
         is_active=True
     ).distinct()
 
-    # SEPARACIÓN: Vigentes vs Finalizados
     proyectos_vigentes = proyectos_base.filter(es_finalizado=False)
     proyectos_finalizados = proyectos_base.filter(es_finalizado=True)
 
@@ -48,6 +52,7 @@ def dashboard(request):
         'menciones_count': menciones.count(),
     }
     return render(request, 'dashboard.html', context)
+
 
 @login_required
 def crear_proyecto(request):
@@ -75,9 +80,10 @@ def crear_proyecto(request):
             
     return redirect('core:dashboard')
 
+
 @login_required
 def detalle_proyecto(request, proyecto_id):
-    """Vista para gestionar el equipo del proyecto y lanzar tareas automatizadas de bienvenida."""
+    """Vista para gestionar el equipo del proyecto con bloque transaccional."""
     proyecto = get_object_or_404(Proyecto, id=proyecto_id)
     
     if not MiembroProyecto.objects.filter(proyecto=proyecto, usuario=request.user, is_active=True).exists():
@@ -90,63 +96,76 @@ def detalle_proyecto(request, proyecto_id):
             
             try:
                 usuario_invitado = Usuario.objects.get(email=email_invitado)
-                MiembroProyecto.objects.update_or_create(
-                    proyecto=proyecto, 
-                    usuario=usuario_invitado,
-                    defaults={'rol': rol_asignado}
-                )
-                messages.success(request, f"¡Usuario {usuario_invitado.username} agregado exitosamente como {rol_asignado}!")
-
-               # --- LÓGICA AUTOMÁTICA: Inducción Unificada ---
-                if usuario_invitado != request.user:
-                    sprint = Sprint.objects.filter(proyecto=proyecto, is_active=True).first()
-                    if not sprint:
-                        sprint = Sprint.objects.create(proyecto=proyecto, nombre="Sprint 1", is_active=True)
-                    
-                    # Buscamos si ya existe la HU de Inducción. Si no, la creamos UNA SOLA VEZ.
-                    tarea_bienvenida, created = Tarea.objects.get_or_create(
-                        sprint=sprint,
-                        titulo="HU-0: Lineamientos del Proyecto",
-                        defaults={
-                            'descripcion': "Espacio central para lineamientos generales del proyecto.",
-                            'proposito': "Mantener a todos los miembros informados.",
-                            'estado': 'Por Hacer',
-                            'responsable': request.user # Se asigna al creador por defecto
-                        }
+                
+                # ====================================================================
+                # 🛡️ INICIO DEL BLOQUE TRANSACCIONAL (ACID)
+                # ====================================================================
+                with transaction.atomic():
+                    MiembroProyecto.objects.update_or_create(
+                        proyecto=proyecto, 
+                        usuario=usuario_invitado,
+                        defaults={'rol': rol_asignado}
                     )
 
-                    # Creamos un mensaje automático en el chat de esa tarea mencionando al nuevo
-                    texto_bienvenida = f"¡Bienvenido al equipo @{usuario_invitado.username}! Revisa los lineamientos."
-                    Evidencia.objects.create(
-                        tarea=tarea_bienvenida,
-                        autor=request.user,
-                        comentario=texto_bienvenida
-                    )
-                    
-                    # Disparamos la notificación
-                    Notificacion.objects.create(
-                        usuario_mencionado=usuario_invitado,
-                        autor_mencion=request.user,
-                        tarea=tarea_bienvenida
-                    )
+                    if usuario_invitado != request.user:
+                        sprint = Sprint.objects.filter(proyecto=proyecto, is_active=True).first()
+                        if not sprint:
+                            sprint = Sprint.objects.create(proyecto=proyecto, nombre="Sprint 1", is_active=True)
+                        
+                        tarea_bienvenida, created = Tarea.objects.get_or_create(
+                            sprint=sprint,
+                            titulo="HU-0: Lineamientos del Proyecto",
+                            defaults={
+                                'descripcion': "Espacio central para lineamientos generales del proyecto.",
+                                'proposito': "Mantener a todos los miembros informados.",
+                                'estado': 'Por Hacer',
+                                'responsable': request.user
+                            }
+                        )
+
+                        texto_bienvenida = f"¡Bienvenido al equipo @{usuario_invitado.username}! Revisa los lineamientos."
+                        Evidencia.objects.create(
+                            tarea=tarea_bienvenida,
+                            autor=request.user,
+                            comentario=texto_bienvenida
+                        )
+                        
+                        Notificacion.objects.create(
+                            usuario_mencionado=usuario_invitado,
+                            autor_mencion=request.user,
+                            tarea=tarea_bienvenida
+                        )
+                # ====================================================================
+                # 🏁 FIN DEL BLOQUE TRANSACCIONAL
+                # ====================================================================
+
+                messages.success(request, f"¡Usuario {usuario_invitado.username} agregado exitosamente!")
                 
             except Usuario.DoesNotExist:
                 messages.error(request, "Error: No existe ningún usuario registrado con ese correo.")
+            except Exception as e:
+                messages.error(request, f"Error transaccional en el servidor: {str(e)}")
         
         return redirect('core:detalle_proyecto', proyecto_id=proyecto.id)
 
     miembros = proyecto.miembros.filter(is_active=True).select_related('usuario')
     return render(request, 'detalle_proyecto.html', {'proyecto': proyecto, 'miembros': miembros})
 
+
 @login_required
 def tablero_kanban(request, proyecto_id):
     """Vista principal que renderiza el tablero Kanban del proyecto."""
     proyecto = get_object_or_404(Proyecto, id=proyecto_id)
-    tareas = Tarea.objects.filter(sprint__proyecto=proyecto, is_active=True)
-    sprints = Sprint.objects.filter(proyecto=proyecto, is_active=True)
-    miembros = proyecto.miembros.filter(is_active=True).select_related('usuario')
     
-    # Lista limpia de Python con las cadenas de los nombres de usuario
+    sprints = Sprint.objects.filter(proyecto=proyecto, is_active=True).order_by('-id')
+    sprint_actual = sprints.first()
+    
+    if sprint_actual:
+        tareas = Tarea.objects.filter(sprint=sprint_actual, is_active=True)
+    else:
+        tareas = Tarea.objects.none()
+        
+    miembros = proyecto.miembros.filter(is_active=True).select_related('usuario')
     miembros_lista = [m.usuario.username for m in miembros]
     
     context = {
@@ -157,9 +176,10 @@ def tablero_kanban(request, proyecto_id):
         'terminado': tareas.filter(estado='Terminado'),
         'sprints': sprints,
         'miembros': miembros,
-        'miembros_json': miembros_lista, # <-- Mapeo directo y seguro para el json_script
+        'miembros_json': miembros_lista,
     }
     return render(request, 'kanban.html', context)
+
 
 @login_required
 def crear_sprint(request, proyecto_id):
@@ -172,6 +192,7 @@ def crear_sprint(request, proyecto_id):
             fecha_fin=request.POST.get('fecha_fin')
         )
     return redirect('core:detalle_proyecto', proyecto_id=proyecto.id)
+
 
 @login_required
 def actualizar_estado_tarea(request):
@@ -186,6 +207,7 @@ def actualizar_estado_tarea(request):
         except Exception as e:
             return JsonResponse({'status': 'error', 'mensaje': str(e)}, status=400)
     return JsonResponse({'status': 'error'}, status=400)
+
 
 @login_required
 def detalle_tarea_api(request, tarea_id):
@@ -202,6 +224,7 @@ def detalle_tarea_api(request, tarea_id):
     
     return JsonResponse({
         'id': tarea.id,
+        'codigo': tarea.codigo,  # <-- NUEVO: Inyectamos el ID corto único para el JS
         'titulo': tarea.titulo,
         'descripcion': tarea.descripcion or 'Sin descripción detallada.',
         'proposito': tarea.proposito or 'Sin propósito definido.',
@@ -209,6 +232,7 @@ def detalle_tarea_api(request, tarea_id):
         'responsable': tarea.responsable.username if tarea.responsable else 'Sin asignar',
         'mensajes': lista
     })
+
 
 @login_required
 def agregar_evidencia_api(request, tarea_id):
@@ -219,7 +243,6 @@ def agregar_evidencia_api(request, tarea_id):
         archivo = request.FILES.get('archivo')
         
         if texto_mensaje or archivo:
-            # 1. Crear la evidencia normal
             evidencia = Evidencia.objects.create(
                 tarea=tarea,
                 autor=request.user,
@@ -227,17 +250,11 @@ def agregar_evidencia_api(request, tarea_id):
                 archivo=archivo
             )
             
-            # 2. Analizar si hay menciones con @ en el texto
             if texto_mensaje:
-                # Busca palabras que inicien con @ (ej: @jair, @maria)
                 candidatos_mencion = re.findall(r'@(\w+)', texto_mensaje)
-                
                 for username in candidatos_mencion:
                     try:
-                        # Buscamos si el usuario mencionado existe
                         usuario_mencionado = Usuario.objects.get(username__iexact=username)
-                        
-                        # Evitamos notificarnos a nosotros mismos
                         if usuario_mencionado != request.user:
                             Notificacion.objects.create(
                                 usuario_mencionado=usuario_mencionado,
@@ -245,11 +262,11 @@ def agregar_evidencia_api(request, tarea_id):
                                 tarea=tarea
                             )
                     except Usuario.DoesNotExist:
-                        # Si escribieron un @ que no es usuario real, lo ignoramos de forma segura
                         continue
                         
             return JsonResponse({'status': 'success'})
     return JsonResponse({'status': 'error'}, status=400)
+
 
 @login_required
 def crear_tarea(request, proyecto_id):
@@ -277,7 +294,6 @@ def crear_tarea(request, proyecto_id):
                 estado='Por Hacer'
             )
             
-            # NUEVO: Si se asignó a alguien más, le notificamos automáticamente
             if responsable and responsable != request.user:
                 Notificacion.objects.create(
                     usuario_mencionado=responsable,
@@ -285,7 +301,9 @@ def crear_tarea(request, proyecto_id):
                     tarea=nueva_tarea
                 )
             
-    return redirect('core:tablero', proyecto_id=proyecto.id)
+    # CORREGIDO: Redirige consistentemente a la ruta del tablero del proyecto
+    return redirect('core:tablero_kanban', proyecto_id=proyecto.id)
+
 
 @login_required
 def marcar_notificacion_leida_api(request, notificacion_id):
@@ -297,6 +315,7 @@ def marcar_notificacion_leida_api(request, notificacion_id):
         return JsonResponse({'status': 'success'})
     return JsonResponse({'status': 'error'}, status=400)
 
+
 @login_required
 def eliminar_tarea_api(request, tarea_id):
     """Permite al creador del proyecto eliminar una tarea."""
@@ -307,6 +326,7 @@ def eliminar_tarea_api(request, tarea_id):
             return JsonResponse({'status': 'success'})
         return JsonResponse({'status': 'error', 'mensaje': 'No tienes permisos'}, status=403)
     return JsonResponse({'status': 'error'}, status=400)
+
 
 @login_required
 def finalizar_proyecto(request, proyecto_id):
