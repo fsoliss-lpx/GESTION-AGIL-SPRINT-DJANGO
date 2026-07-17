@@ -40,6 +40,7 @@ class Proyecto(BaseModel):
     fecha_inicio = models.DateField(null=True, blank=True)
     fecha_fin = models.DateField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
+    es_finalizado = models.BooleanField(default=False)
     
     def __str__(self):
         return self.nombre
