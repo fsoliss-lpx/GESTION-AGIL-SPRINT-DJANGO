@@ -1,30 +1,13 @@
 {% load static %}
 <!DOCTYPE html>
-<html lang="es" data-bs-theme="dark"> <!-- Por defecto en oscuro -->
+<html lang="es" data-bs-theme="dark">
 <head>
     <meta charset="UTF-8">
     <title>Tablero - {{ proyecto.nombre }}</title>
-    <!-- Bootstrap 5 -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- SortableJS para el Drag and Drop -->
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
     <style>
-        /* --- VARIABLES DE COLOR (Cambian según el tema) --- */
         :root {
-            /* Modo Claro (Light) */
-            --kb-bg: #f4f6f9;
-            --kb-text: #333333;
-            --kb-header-bg: #ffffff;
-            --kb-header-border: #e5e7eb;
-            --kb-card-bg: #ffffff;
-            --kb-card-border: #e5e7eb;
-            --kb-card-hover: #d1d5db;
-            --kb-ghost-bg: #f3f4f6;
-            --kb-title-color: #1a253f;
-        }
-
-        [data-bs-theme="dark"] {
-            /* Modo Oscuro (Dark) */
             --kb-bg: #111315;
             --kb-text: #d1d5db;
             --kb-header-bg: #1e2124;
@@ -36,6 +19,18 @@
             --kb-title-color: #ffffff;
         }
 
+        [data-bs-theme="light"] {
+            --kb-bg: #f4f6f9;
+            --kb-text: #333333;
+            --kb-header-bg: #ffffff;
+            --kb-header-border: #e5e7eb;
+            --kb-card-bg: #ffffff;
+            --kb-card-border: #e5e7eb;
+            --kb-card-hover: #d1d5db;
+            --kb-ghost-bg: #f3f4f6;
+            --kb-title-color: #1a253f;
+        }
+
         body { 
             background-color: var(--kb-bg); 
             color: var(--kb-text); 
@@ -44,26 +39,11 @@
             transition: background-color 0.3s, color 0.3s;
         }
         
-        /* Navbar / Header */
-        .kanban-header { 
-            background-color: var(--kb-header-bg); 
-            border-bottom: 1px solid var(--kb-header-border); 
-            padding: 15px 30px; 
-            transition: background-color 0.3s;
-        }
+        .kanban-header { background-color: var(--kb-header-bg); border-bottom: 1px solid var(--kb-header-border); padding: 15px 30px; }
         .project-title { color: var(--kb-title-color); }
-        
-        /* Columnas del Tablero */
         .kanban-board { display: flex; gap: 15px; padding: 20px 30px; overflow-x: auto; min-height: 85vh; }
-        .kanban-column {
-            background-color: transparent;
-            min-width: 300px;
-            max-width: 300px;
-            display: flex;
-            flex-direction: column;
-        }
+        .kanban-column { background-color: transparent; min-width: 300px; max-width: 300px; display: flex; flex-direction: column; }
         
-        /* Cabeceras de las columnas */
         .col-header { font-size: 0.85rem; font-weight: 700; padding: 8px 12px; border-radius: 6px; margin-bottom: 15px; display: flex; justify-content: space-between;}
         .header-por-hacer { background-color: rgba(107, 114, 128, 0.15); color: #6b7280; border: 1px solid rgba(107, 114, 128, 0.3); }
         .header-progreso { background-color: rgba(59, 130, 246, 0.15); color: #3b82f6; border: 1px solid rgba(59, 130, 246, 0.3); }
@@ -74,7 +54,6 @@
         [data-bs-theme="dark"] .header-progreso { color: #60a5fa; }
         [data-bs-theme="dark"] .header-terminado { color: #34d399; }
 
-        /* Tarjetas de Tareas (Cards) */
         .kanban-cards-container { flex-grow: 1; min-height: 150px; }
         .task-card {
             background-color: var(--kb-card-bg);
@@ -82,48 +61,55 @@
             border-radius: 8px;
             padding: 15px;
             margin-bottom: 12px;
-            cursor: pointer; /* Cambiado a pointer para indicar que es clicable */
+            cursor: pointer;
             transition: all 0.2s;
         }
-        .task-card:active { cursor: grabbing; }
-        .task-card:hover { border-color: var(--kb-card-hover); transform: translateY(-2px); box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        .task-card:hover { border-color: var(--kb-card-hover); transform: translateY(-2px); }
         .task-title { color: var(--kb-title-color); }
-        
-        /* Efecto al arrastrar */
         .sortable-ghost { opacity: 0.4; background-color: var(--kb-ghost-bg); border: 1px dashed #6b7280; }
+
+        /* Estilos del panel de chat de evidencias */
+        .preview-img { max-width: 100%; max-height: 120px; object-fit: cover; border-radius: 6px; margin-top: 5px; }
     </style>
 </head>
 <body>
+    <!-- Inyectamos los miembros en un contenedor nativo seguro -->
+    {{ miembros_json|json_script:"datos-miembros-proyecto" }}
 
     <div class="kanban-header d-flex justify-content-between align-items-center shadow-sm">
         <div>
             <a href="{% url 'core:detalle_proyecto' proyecto.id %}" class="text-decoration-none text-muted small">← Volver al equipo</a>
             <h4 class="project-title mb-0 mt-1 fw-bold">{{ proyecto.nombre }} <span class="badge bg-secondary fs-6 ms-2">Sprint 1</span></h4>
+            {% if proyecto.fecha_inicio and proyecto.fecha_fin %}
+                <small class="text-muted">Duración: {{ proyecto.fecha_inicio }} al {{ proyecto.fecha_fin }}</small>
+            {% endif %}
         </div>
         <div class="d-flex gap-3 align-items-center">
-            <!-- Botón Mágico para cambiar el tema -->
-            <button id="theme-toggle" class="btn btn-sm btn-outline-secondary rounded-pill px-3">
-                ☀️ Claro
-            </button>
-            <button class="btn btn-sm px-3" style="background-color: #f5821f; color: white; font-weight: 500;">+ Añadir Tarea</button>
+            <button id="theme-toggle" class="btn btn-sm btn-outline-secondary rounded-pill px-3">☀️ Claro</button>
+            <button class="btn btn-sm px-3" style="background-color: #f5821f; color: white; font-weight: 500;" data-bs-toggle="modal" data-bs-target="#modalCrearTarea">+ Añadir Tarea</button>
         </div>
     </div>
 
     <!-- TABLERO -->
     <div class="kanban-board">
-        
         <!-- Columna: POR HACER -->
         <div class="kanban-column">
-            <div class="col-header header-por-hacer">
-                <span>OPEN</span> <span>{{ por_hacer.count }}</span>
-            </div>
+            <div class="col-header header-por-hacer"><span>OPEN</span> <span>{{ por_hacer.count }}</span></div>
             <div class="kanban-cards-container" data-estado="Por Hacer">
                 {% for tarea in por_hacer %}
                 <div class="task-card shadow-sm" data-id="{{ tarea.id }}">
-                    <h6 class="task-title fw-bold mb-2">{{ tarea.titulo }}</h6>
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <h6 class="task-title fw-bold mb-0">{{ tarea.titulo }}</h6>
+                        {% if proyecto.creador == request.user %}
+                            <button type="button" class="btn btn-sm text-danger border-0 p-0 ms-2" onclick="eliminarTarea({{ tarea.id }}); event.stopPropagation();" title="Eliminar Tarea">🗑️</button>
+                        {% endif %}
+                    </div>
                     <div class="d-flex justify-content-between align-items-center mt-3">
                         <small class="text-muted">👤 {{ tarea.responsable.username|default:"Sin asignar" }}</small>
-                        <span class="badge bg-light text-dark border">HU-{{ tarea.id }}</span>
+                        <div class="d-flex align-items-center gap-1">
+                            <span class="badge bg-light text-dark border">{{ tarea.codigo }}</span>
+                            <button type="button" class="btn btn-sm btn-light border-0 py-0 px-1 text-muted" onclick="copiarID('{{ tarea.codigo }}'); event.stopPropagation();" title="Copiar ID">📋</button>
+                        </div>
                     </div>
                 </div>
                 {% endfor %}
@@ -132,16 +118,22 @@
 
         <!-- Columna: EN PROGRESO -->
         <div class="kanban-column">
-            <div class="col-header header-progreso">
-                <span>EN CURSO</span> <span>{{ en_progreso.count }}</span>
-            </div>
+            <div class="col-header header-progreso"><span>EN CURSO</span> <span>{{ en_progreso.count }}</span></div>
             <div class="kanban-cards-container" data-estado="En Progreso">
                 {% for tarea in en_progreso %}
                 <div class="task-card shadow-sm" data-id="{{ tarea.id }}">
-                    <h6 class="task-title fw-bold mb-2">{{ tarea.titulo }}</h6>
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <h6 class="task-title fw-bold mb-0">{{ tarea.titulo }}</h6>
+                        {% if proyecto.creador == request.user %}
+                            <button type="button" class="btn btn-sm text-danger border-0 p-0 ms-2" onclick="eliminarTarea({{ tarea.id }}); event.stopPropagation();" title="Eliminar Tarea">🗑️</button>
+                        {% endif %}
+                    </div>
                     <div class="d-flex justify-content-between align-items-center mt-3">
                         <small class="text-muted">👤 {{ tarea.responsable.username|default:"Sin asignar" }}</small>
-                        <span class="badge bg-light text-dark border">HU-{{ tarea.id }}</span>
+                        <div class="d-flex align-items-center gap-1">
+                            <span class="badge bg-light text-dark border">{{ tarea.codigo }}</span>
+                            <button type="button" class="btn btn-sm btn-light border-0 py-0 px-1 text-muted" onclick="copiarID('{{ tarea.codigo }}'); event.stopPropagation();" title="Copiar ID">📋</button>
+                        </div>
                     </div>
                 </div>
                 {% endfor %}
@@ -150,16 +142,22 @@
 
         <!-- Columna: EN REVISIÓN -->
         <div class="kanban-column">
-            <div class="col-header header-revision">
-                <span>IN REVIEW</span> <span>{{ en_revision.count }}</span>
-            </div>
+            <div class="col-header header-revision"><span>IN REVIEW</span> <span>{{ en_revision.count }}</span></div>
             <div class="kanban-cards-container" data-estado="En revisión">
                 {% for tarea in en_revision %}
                 <div class="task-card shadow-sm" data-id="{{ tarea.id }}">
-                    <h6 class="task-title fw-bold mb-2">{{ tarea.titulo }}</h6>
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <h6 class="task-title fw-bold mb-0">{{ tarea.titulo }}</h6>
+                        {% if proyecto.creador == request.user %}
+                            <button type="button" class="btn btn-sm text-danger border-0 p-0 ms-2" onclick="eliminarTarea({{ tarea.id }}); event.stopPropagation();" title="Eliminar Tarea">🗑️</button>
+                        {% endif %}
+                    </div>
                     <div class="d-flex justify-content-between align-items-center mt-3">
                         <small class="text-muted">👤 {{ tarea.responsable.username|default:"Sin asignar" }}</small>
-                        <span class="badge bg-light text-dark border">HU-{{ tarea.id }}</span>
+                        <div class="d-flex align-items-center gap-1">
+                            <span class="badge bg-light text-dark border">{{ tarea.codigo }}</span>
+                            <button type="button" class="btn btn-sm btn-light border-0 py-0 px-1 text-muted" onclick="copiarID('{{ tarea.codigo }}'); event.stopPropagation();" title="Copiar ID">📋</button>
+                        </div>
                     </div>
                 </div>
                 {% endfor %}
@@ -168,87 +166,205 @@
 
         <!-- Columna: TERMINADO -->
         <div class="kanban-column">
-            <div class="col-header header-terminado">
-                <span>COMPLETED</span> <span>{{ terminado.count }}</span>
-            </div>
+            <div class="col-header header-terminado"><span>COMPLETED</span> <span>{{ terminado.count }}</span></div>
             <div class="kanban-cards-container" data-estado="Terminado">
                 {% for tarea in terminado %}
                 <div class="task-card shadow-sm" data-id="{{ tarea.id }}">
-                    <h6 class="task-title fw-bold text-decoration-line-through mb-2 opacity-75">{{ tarea.titulo }}</h6>
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <h6 class="task-title fw-bold text-decoration-line-through opacity-75 mb-0">{{ tarea.titulo }}</h6>
+                        {% if proyecto.creador == request.user %}
+                            <button type="button" class="btn btn-sm text-danger border-0 p-0 ms-2 opacity-75" onclick="eliminarTarea({{ tarea.id }}); event.stopPropagation();" title="Eliminar Tarea">🗑️</button>
+                        {% endif %}
+                    </div>
                     <div class="d-flex justify-content-between align-items-center mt-3 opacity-75">
                         <small class="text-muted">👤 {{ tarea.responsable.username|default:"Sin asignar" }}</small>
-                        <span class="badge bg-light text-dark border">HU-{{ tarea.id }}</span>
+                        <div class="d-flex align-items-center gap-1">
+                            <span class="badge bg-light text-dark border">{{ tarea.codigo }}</span>
+                            <button type="button" class="btn btn-sm btn-light border-0 py-0 px-1 text-muted" onclick="copiarID('{{ tarea.codigo }}'); event.stopPropagation();" title="Copiar ID">📋</button>
+                        </div>
                     </div>
                 </div>
                 {% endfor %}
             </div>
         </div>
-
     </div>
 
-    <!-- PANEL LATERAL (OFFCANVAS) PARA LA TAREA Y EL CHAT -->
-    <div class="offcanvas offcanvas-end" tabindex="-1" id="panelTarea" style="width: 450px; background-color: var(--kb-bg); border-left: 1px solid var(--kb-header-border);">
+    <!-- MODAL PARA CREAR TAREA -->
+    <div class="modal fade" id="modalCrearTarea" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content" style="background-color: var(--kb-card-bg); color: var(--kb-text); border: 1px solid var(--kb-card-border);">
+                <div class="modal-header border-bottom" style="border-color: var(--kb-header-border) !important;">
+                    <h5 class="modal-title fw-bold" style="color: var(--kb-title-color);">Crear Nueva Tarea (HU)</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form method="post" action="{% url 'core:crear_tarea' proyecto.id %}">
+                    {% csrf_token %}
+                    <div class="modal-body p-4">
+                        {% if sprints %}
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold" style="color: var(--kb-title-color);">Título de la Tarea</label>
+                                <input type="text" name="titulo" class="form-control" required placeholder="Ej: HU2: Login y Permisos" style="background-color: var(--kb-bg); color: var(--kb-text); border: 1px solid var(--kb-card-border);">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold" style="color: var(--kb-title-color);">Propósito</label>
+                                <textarea name="proposito" class="form-control" rows="2" placeholder="Ej: Restringir acciones según el tipo de usuario..." style="background-color: var(--kb-bg); color: var(--kb-text); border: 1px solid var(--kb-card-border);"></textarea>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold" style="color: var(--kb-title-color);">Descripción</label>
+                                <textarea name="descripcion" class="form-control" rows="3" placeholder="Como usuario, quiero iniciar sesión..." style="background-color: var(--kb-bg); color: var(--kb-text); border: 1px solid var(--kb-card-border);"></textarea>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold" style="color: var(--kb-title-color);">Criterios de Aceptación</label>
+                                <textarea name="criterios_aceptacion" class="form-control" rows="3" placeholder="- Toda tarea ingresa con el estado 'Por Hacer'..." style="background-color: var(--kb-bg); color: var(--kb-text); border: 1px solid var(--kb-card-border);"></textarea>
+                            </div>
+                            <div class="row">
+                                <div class="col-6 mb-3">
+                                    <label class="form-label small fw-bold" style="color: var(--kb-title-color);">Asignar al Sprint</label>
+                                    <select name="sprint" class="form-select" required style="background-color: var(--kb-bg); color: var(--kb-text); border: 1px solid var(--kb-card-border);">
+                                        {% for sprint in sprints %}
+                                        <option value="{{ sprint.id }}">{{ sprint.nombre }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="col-6 mb-3">
+                                    <label class="form-label small fw-bold" style="color: var(--kb-title-color);">Responsable</label>
+                                    <select name="responsable" class="form-select" style="background-color: var(--kb-bg); color: var(--kb-text); border: 1px solid var(--kb-card-border);">
+                                        <option value="">Sin asignar</option>
+                                        {% for miembro in miembros %}
+                                        <option value="{{ miembro.usuario.id }}">{{ miembro.usuario.username }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </div>
+                        {% else %}
+                            <div class="alert text-center" style="background-color: rgba(245, 130, 31, 0.2); border: 1px solid #f5821f; color: var(--kb-text);">
+                                <strong>¡No hay Sprints activos!</strong> Crea un Sprint en el Admin para asignar tareas.
+                            </div>
+                        {% endif %}
+                    </div>
+                    <div class="modal-footer border-top" style="border-color: var(--kb-header-border) !important;">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        {% if sprints %}
+                            <button type="submit" class="btn" style="background-color: #f5821f; color: white; font-weight: 500;">Guardar Tarea</button>
+                        {% endif %}
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- PANEL LATERAL PRO (Doble columna) -->
+    <div class="offcanvas offcanvas-end" tabindex="-1" id="panelTarea" style="width: 850px; background-color: var(--kb-bg); border-left: 1px solid var(--kb-header-border);">
         <div class="offcanvas-header border-bottom" style="border-color: var(--kb-header-border) !important;">
-            <h5 class="offcanvas-title fw-bold" id="panel-titulo" style="color: var(--kb-title-color);">Cargando...</h5>
+            <h5 class="offcanvas-title fw-bold" id="panel-titulo" style="color: var(--kb-title-color);">HU: Detalles</h5>
             <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close" id="btn-cerrar-panel"></button>
         </div>
-        <div class="offcanvas-body d-flex flex-column p-0">
-            
-            <!-- Detalles de la Tarea -->
-            <div class="p-3 border-bottom" style="border-color: var(--kb-header-border) !important;">
-                <span class="badge bg-secondary mb-2" id="panel-responsable">👤 Cargando...</span>
-                <p class="small mb-0" id="panel-descripcion" style="color: var(--kb-text);">...</p>
-            </div>
-            
-            <!-- Zona de Chat / Evidencias -->
-            <div class="flex-grow-1 overflow-auto p-3" id="panel-chat-box" style="background-color: rgba(0,0,0,0.05);">
-                <!-- Los mensajes aparecerán aquí mágicamente -->
-            </div>
+        <div class="offcanvas-body p-0">
+            <div class="container-fluid h-100">
+                <div class="row h-100 g-0">
+                    
+                    <!-- COLUMNA IZQUIERDA: Contenidos -->
+                    <div class="col-md-7 p-4 h-100 overflow-auto border-end" style="border-color: var(--kb-header-border) !important;">
+                        <div class="mb-4">
+                            <span class="badge bg-secondary mb-2" id="panel-responsable">👤 Responsable: ...</span>
+                        </div>
+                        
+                        <div class="mb-4">
+                            <h6 class="fw-bold text-uppercase text-muted small">Propósito</h6>
+                            <p id="panel-proposito" style="color: var(--kb-text); line-height: 1.5; font-size: 0.95rem;">...</p>
+                        </div>
 
-            <!-- Input de Comentarios -->
-            <div class="p-3 border-top" style="border-color: var(--kb-header-border) !important; background-color: var(--kb-header-bg);">
-                <div class="input-group">
-                    <textarea id="input-chat" class="form-control" rows="2" placeholder="Escribe un comentario o evidencia... Usa @usuario para mencionar" style="background-color: var(--kb-card-bg); color: var(--kb-text); border: 1px solid var(--kb-card-border); resize: none;"></textarea>
-                    <button class="btn" id="btn-enviar-chat" style="background-color: #f5821f; color: white; font-weight: 500;">Enviar</button>
+                        <div class="mb-4">
+                            <h6 class="fw-bold text-uppercase text-muted small">Descripción</h6>
+                            <p id="panel-descripcion" style="color: var(--kb-text); line-height: 1.5; font-size: 0.95rem;">...</p>
+                        </div>
+
+                        <div class="mb-4">
+                            <h6 class="fw-bold text-uppercase text-muted small">Criterios de Aceptación</h6>
+                            <p id="panel-criterios" style="white-space: pre-wrap; color: var(--kb-text); line-height: 1.5; font-size: 0.95rem;">...</p>
+                        </div>
+
+                        <div class="mt-4 pt-3 border-top" style="border-color: var(--kb-header-border) !important;">
+                            <h6 class="fw-bold text-uppercase text-muted small mb-3">📁 Adjuntos / Entregables</h6>
+                            <div class="row g-2" id="panel-grid-adjuntos"></div>
+                        </div>
+                    </div>
+
+                    <!-- COLUMNA DERECHA: Chat / Actividad -->
+                    <div class="col-md-5 d-flex flex-column h-100" style="background-color: rgba(0,0,0,0.08);">
+                        <div class="p-3 border-bottom" style="border-color: var(--kb-header-border) !important; background-color: rgba(0,0,0,0.15);">
+                            <h6 class="fw-bold mb-0" style="color: var(--kb-title-color);">Activity / Evidencias</h6>
+                        </div>
+
+                        <div class="flex-grow-1 overflow-auto p-3" id="panel-chat-box"></div>
+
+                        <!-- Bloque de Input del Chat -->
+                        <div class="p-3 border-top" style="border-color: var(--kb-header-border) !important; background-color: var(--kb-header-bg); position: relative;">
+                            <div class="d-flex flex-column gap-2">
+
+                                <!-- Dropdown flotante de menciones con posición absoluta correcta -->
+
+                                <textarea id="input-chat" class="form-control" rows="2" placeholder="Escribe un comentario... Menciona con @usuario o pega captura con Ctrl+V" style="background-color: var(--kb-card-bg); color: var(--kb-text); border: 1px solid var(--kb-card-border); resize: none; font-size: 0.9rem;"></textarea>
+                                
+                                <div id="preview-portapapeles" class="d-none align-items-center justify-content-between p-1 px-2 rounded border" style="background-color: rgba(245, 130, 31, 0.1); border-color: rgba(245, 130, 31, 0.3) !important;">
+                                    <span class="small text-truncate text-warning">📸 Captura detectada desde el portapapeles</span>
+                                    <button type="button" class="btn btn-sm text-danger p-0" id="btn-quitar-pegado" style="font-size: 0.8rem;">Quitar</button>
+                                </div>
+
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <label class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1">
+                                        📎 <span id="file-label" class="small">Adjuntar archivo</span>
+                                        <input type="file" id="input-archivo" style="display: none;">
+                                    </label>
+                                    <button class="btn btn-sm px-3" id="btn-enviar-chat" style="background-color: #f5821f; color: white; font-weight: 500;">Enviar</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
             </div>
-            
         </div>
     </div>
 
-    <!-- Bootstrap JS (Necesario para el Offcanvas) -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-
-    <!-- SCRIPTS DE LÓGICA -->
     <script>
-        // --- 1. LÓGICA DEL MODO CLARO / OSCURO ---
-        const themeToggleBtn = document.getElementById('theme-toggle');
+        // --- ELEMENTOS GLOBALES DEL DOM ---
         const htmlElement = document.documentElement;
+        const themeToggleBtn = document.getElementById('theme-toggle');
         const btnCerrarPanel = document.getElementById('btn-cerrar-panel');
+        const inputChat = document.getElementById('input-chat');
+        const inputArchivo = document.getElementById('input-archivo');
+        const fileLabel = document.getElementById('file-label');
+        const previewPortapapeles = document.getElementById('preview-portapapeles');
+        const btnQuitarPegado = document.getElementById('btn-quitar-pegado');
+        const btnEnviarChat = document.getElementById('btn-enviar-chat');
+        const cajaSugerencias = document.getElementById('sugerencias-menciones');
+        const kanbanBoard = document.querySelector('.kanban-board');
 
-        // Cargar el tema que el usuario guardó previamente
+        let tareaActivaId = null;
+        let archivoPegadoBlob = null;
+
+        // --- 1. LÓGICA DEL MODO CLARO / OSCURO ---
         const savedTheme = localStorage.getItem('kanban_theme') || 'dark';
         htmlElement.setAttribute('data-bs-theme', savedTheme);
         themeToggleBtn.innerHTML = savedTheme === 'dark' ? '☀️ Claro' : '🌙 Oscuro';
-        if(savedTheme === 'dark') btnCerrarPanel.classList.add('btn-close-white');
+        if(savedTheme === 'dark' && btnCerrarPanel) btnCerrarPanel.classList.add('btn-close-white');
 
-        // Cambiar tema al hacer clic
         themeToggleBtn.addEventListener('click', () => {
             const currentTheme = htmlElement.getAttribute('data-bs-theme');
             const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-            
             htmlElement.setAttribute('data-bs-theme', newTheme);
             localStorage.setItem('kanban_theme', newTheme);
             themeToggleBtn.innerHTML = newTheme === 'dark' ? '☀️ Claro' : '🌙 Oscuro';
-            
-            // Ajustar el color de la X para cerrar el panel
-            if (newTheme === 'dark') {
-                btnCerrarPanel.classList.add('btn-close-white');
-            } else {
-                btnCerrarPanel.classList.remove('btn-close-white');
+            if (btnCerrarPanel) {
+                if (newTheme === 'dark') {
+                    btnCerrarPanel.classList.add('btn-close-white');
+                } else {
+                    btnCerrarPanel.classList.remove('btn-close-white');
+                }
             }
         });
-
 
         // --- 2. LÓGICA DE DRAG AND DROP (SortableJS) ---
         function actualizarEstadoEnBD(tareaId, nuevoEstado) {
@@ -258,14 +374,7 @@
                     'Content-Type': 'application/json',
                     'X-CSRFToken': '{{ csrf_token }}'
                 },
-                body: JSON.stringify({
-                    'tarea_id': tareaId,
-                    'estado': nuevoEstado
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if(data.status !== 'success') console.error("Error al actualizar la tarea");
+                body: JSON.stringify({ 'tarea_id': tareaId, 'estado': nuevoEstado })
             });
         }
 
@@ -281,63 +390,118 @@
                     
                     if (evt.from !== evt.to) {
                         actualizarEstadoEnBD(tareaId, nuevoEstado);
-                        
                         const titulo = tarjetaElement.querySelector('h6');
-                        const footer = tarjetaElement.querySelector('.mt-3');
+                        const botonEliminar = tarjetaElement.querySelector('.text-danger');
                         if(nuevoEstado === 'Terminado') {
                             titulo.classList.add('text-decoration-line-through', 'opacity-75');
-                            if(footer) footer.classList.add('opacity-75');
+                            if(botonEliminar) botonEliminar.classList.add('opacity-75');
                         } else {
                             titulo.classList.remove('text-decoration-line-through', 'opacity-75');
-                            if(footer) footer.classList.remove('opacity-75');
+                            if(botonEliminar) botonEliminar.classList.remove('opacity-75');
                         }
                     }
                 }
             });
         });
 
-
-        // --- 3. LÓGICA DEL PANEL LATERAL Y CHAT ---
+        // --- 3. LÓGICA DEL PANEL LATERAL, CHAT Y CAPTURAS ---
         const panelTarea = new bootstrap.Offcanvas(document.getElementById('panelTarea'));
-        let tareaActivaId = null;
 
-        // 3.1 Abrir panel al hacer clic en cualquier tarjeta
-        document.querySelector('.kanban-board').addEventListener('click', (e) => {
-            const card = e.target.closest('.task-card');
-            if(card) {
-                tareaActivaId = card.getAttribute('data-id');
-                cargarDetallesTarea(tareaActivaId);
-            }
-        });
+        if (inputArchivo) {
+            inputArchivo.addEventListener('change', (e) => {
+                const fileName = e.target.files[0] ? e.target.files[0].name : 'Adjuntar archivo';
+                fileLabel.innerText = fileName.length > 18 ? fileName.substring(0, 15) + '...' : fileName;
+            });
+        }
 
-        // 3.2 Función que pide los datos al servidor
+        if (inputChat) {
+            inputChat.addEventListener('paste', (e) => {
+                const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+                for (let i = 0; i < items.length; i++) {
+                    if (items[i].type.indexOf('image') !== -1) {
+                        archivoPegadoBlob = items[i].getAsFile();
+                        if (previewPortapapeles) {
+                            previewPortapapeles.classList.remove('d-none');
+                            previewPortapapeles.classList.add('d-flex');
+                        }
+                        break;
+                    }
+                }
+            });
+        }
+
+        if (btnQuitarPegado) {
+            btnQuitarPegado.addEventListener('click', () => {
+                archivoPegadoBlob = null;
+                previewPortapapeles.classList.remove('d-flex');
+                previewPortapapeles.classList.add('d-none');
+            });
+        }
+
+        if (kanbanBoard) {
+            kanbanBoard.addEventListener('click', (e) => {
+                const card = e.target.closest('.task-card');
+                if(card) {
+                    tareaActivaId = card.getAttribute('data-id');
+                    cargarDetallesTarea(tareaActivaId);
+                }
+            });
+        }
+
         function cargarDetallesTarea(tareaId) {
             fetch(`/api/tarea/${tareaId}/`)
             .then(res => res.json())
             .then(data => {
                 document.getElementById('panel-titulo').innerText = data.titulo;
                 document.getElementById('panel-descripcion').innerText = data.descripcion;
+                document.getElementById('panel-proposito').innerText = data.proposito;
+                document.getElementById('panel-criterios').innerText = data.criterios_aceptacion;
                 document.getElementById('panel-responsable').innerText = `👤 Responsable: ${data.responsable}`;
                 
-                renderizarChat(data.mensajes);
+                renderizarChatYAdjuntos(data.mensajes);
                 panelTarea.show();
             });
         }
 
-        // 3.3 Pintar los mensajes y detectar las menciones con "@"
-        function renderizarChat(mensajes) {
+        function renderizarChatYAdjuntos(mensajes) {
             const chatBox = document.getElementById('panel-chat-box');
+            const gridAdjuntos = document.getElementById('panel-grid-adjuntos');
             chatBox.innerHTML = '';
-            
-            if(mensajes.length === 0) {
-                chatBox.innerHTML = '<p class="text-center text-muted mt-4 small">No hay evidencias ni comentarios aún. ¡Sé el primero!</p>';
-                return;
-            }
+            gridAdjuntos.innerHTML = '';
+
+            let hasAdjuntos = false;
 
             mensajes.forEach(msg => {
-                // MAGIA: Expresión regular que busca @usuario y lo pinta de naranja
                 const textoMencionado = msg.texto.replace(/@(\w+)/g, '<span style="color: #f5821f; font-weight: bold; cursor: pointer;">@$1</span>');
                 
+                let htmlAdjunto = '';
+                if(msg.archivo_url) {
+                    hasAdjuntos = true;
+                    const esImagen = msg.archivo_url.match(/\.(jpeg|jpg|gif|png)$/i) != null;
+                    
+                    if(esImagen) {
+                        htmlAdjunto = `<div class="mt-2"><a href="${msg.archivo_url}" target="_blank"><img src="${msg.archivo_url}" class="preview-img img-fluid border"></a></div>`;
+                        gridAdjuntos.innerHTML += `
+                            <div class="col-4">
+                                <div class="card bg-dark border-0 overflow-hidden">
+                                    <a href="${msg.archivo_url}" target="_blank">
+                                        <img src="${msg.archivo_url}" class="card-img-top" style="height: 80px; object-fit: cover;">
+                                    </a>
+                                </div>
+                            </div>
+                        `;
+                    } else {
+                        htmlAdjunto = `<div class="mt-2"><a href="${msg.archivo_url}" target="_blank" class="btn btn-sm btn-outline-light text-truncate" style="max-width: 100%;">📄 Descargar: ${msg.archivo_nombre}</a></div>`;
+                        gridAdjuntos.innerHTML += `
+                            <div class="col-6">
+                                <a href="${msg.archivo_url}" target="_blank" class="btn btn-sm btn-outline-secondary w-100 text-truncate text-start p-2">
+                                    📎 ${msg.archivo_nombre}
+                                </a>
+                            </div>
+                        `;
+                    }
+                }
+
                 chatBox.innerHTML += `
                     <div class="mb-3 p-2 rounded shadow-sm" style="background-color: var(--kb-card-bg); border: 1px solid var(--kb-card-border);">
                         <div class="d-flex justify-content-between align-items-center mb-1">
@@ -345,35 +509,169 @@
                             <span class="text-muted" style="font-size: 0.7rem;">${msg.fecha}</span>
                         </div>
                         <p class="mb-0 small" style="color: var(--kb-text);">${textoMencionado}</p>
+                        ${htmlAdjunto}
                     </div>
                 `;
             });
-            // Hacer scroll automático hacia el último mensaje
+
+            if(!hasAdjuntos) {
+                gridAdjuntos.innerHTML = '<p class="text-muted small">No hay evidencias ni entregables subidos.</p>';
+            }
+            if(mensajes.length === 0) {
+                chatBox.innerHTML = '<p class="text-center text-muted mt-4 small">No hay actividad registrada.</p>';
+            }
             chatBox.scrollTop = chatBox.scrollHeight;
         }
 
-        // 3.4 Enviar un nuevo mensaje / evidencia
-        document.getElementById('btn-enviar-chat').addEventListener('click', () => {
-            const input = document.getElementById('input-chat');
-            const texto = input.value.trim();
-            if(!texto || !tareaActivaId) return;
+        if (btnEnviarChat) {
+            btnEnviarChat.addEventListener('click', () => {
+                const texto = inputChat.value.trim();
+                const archivoManual = inputArchivo ? inputArchivo.files[0] : null;
 
-            fetch(`/api/tarea/${tareaActivaId}/evidencia/`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': '{{ csrf_token }}'
-                },
-                body: JSON.stringify({ 'texto': texto })
-            })
-            .then(res => res.json())
-            .then(data => {
-                if(data.status === 'success') {
-                    input.value = ''; // Limpiar cajón
-                    cargarDetallesTarea(tareaActivaId); // Recargar el chat para ver el nuevo mensaje
+                if(!texto && !archivoManual && !archivoPegadoBlob) return;
+
+                const formData = new FormData();
+                formData.append('texto', texto);
+                
+                if (archivoPegadoBlob) {
+                    formData.append('archivo', archivoPegadoBlob, 'captura_evidencia.png');
+                } else if (archivoManual) {
+                    formData.append('archivo', archivoManual);
+                }
+
+                fetch(`/api/tarea/${tareaActivaId}/evidencia/`, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': '{{ csrf_token }}'
+                    },
+                    body: formData
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if(data.status === 'success') {
+                        inputChat.value = '';
+                        if (inputArchivo) inputArchivo.value = '';
+                        archivoPegadoBlob = null;
+                        if (fileLabel) fileLabel.innerText = 'Adjuntar archivo';
+                        if (previewPortapapeles) {
+                            previewPortapapeles.classList.remove('d-flex');
+                            previewPortapapeles.classList.add('d-none');
+                        }
+                        cargarDetallesTarea(tareaActivaId);
+                    }
+                });
+            });
+        }
+        
+        // --- 4. LÓGICA DE AUTOCOMPLETADO DE MENCIONES (VERSIÓN 100% DINÁMICA) ---
+        if (inputChat) {
+            inputChat.addEventListener('input', () => {
+                const cajaSugerenciasDinamica = document.getElementById('sugerencias-menciones');
+                const contenedorMiembros = document.getElementById('datos-miembros-proyecto');
+                
+                if (!cajaSugerenciasDinamica || !contenedorMiembros) return;
+
+                let listaMiembrosProyecto = [];
+                try {
+                    listaMiembrosProyecto = JSON.parse(contenedorMiembros.textContent);
+                } catch (e) {
+                    console.error("Error al parsear miembros:", e);
+                    return;
+                }
+
+                const texto = inputChat.value;
+                const cursorPosition = inputChat.selectionStart;
+                
+                const textoHastaCursor = texto.slice(0, cursorPosition);
+                const coincidenciaAt = textoHastaCursor.match(/@(\w*)$/);
+
+                if (coincidenciaAt) {
+                    const queryUser = coincidenciaAt[1].toLowerCase();
+                    
+                    const miembrosFiltrados = listaMiembrosProyecto.filter(username => 
+                        username.toLowerCase().includes(queryUser)
+                    );
+
+                    if (miembrosFiltrados.length > 0) {
+                        cajaSugerenciasDinamica.innerHTML = '';
+                        miembrosFiltrados.forEach(username => {
+                            const botonElement = document.createElement('button');
+                            botonElement.type = 'button';
+                            botonElement.className = 'list-group-item list-group-item-action border-0 py-2 small text-start';
+                            botonElement.style.backgroundColor = 'var(--kb-card-bg)';
+                            botonElement.style.color = 'var(--kb-text)';
+                            botonElement.innerText = `@${username}`;
+                            
+                            botonElement.addEventListener('click', (e) => {
+                                e.preventDefault();
+                                const inicioTexto = textoHastaCursor.slice(0, coincidenciaAt.index);
+                                const finTexto = texto.slice(cursorPosition);
+                                
+                                inputChat.value = `${inicioTexto}@${username} ${finTexto}`;
+                                cajaSugerenciasDinamica.classList.add('d-none');
+                                inputChat.focus();
+                            });
+
+                            cajaSugerenciasDinamica.appendChild(botonElement);
+                        });
+
+                        cajaSugerenciasDinamica.classList.remove('d-none');
+                        
+                        const rect = inputChat.getBoundingClientRect();
+                        cajaSugerenciasDinamica.style.left = `${rect.left}px`;
+                        cajaSugerenciasDinamica.style.top = `${rect.top - cajaSugerenciasDinamica.offsetHeight - 5}px`;
+
+                    } else {
+                        cajaSugerenciasDinamica.classList.add('d-none');
+                    }
+                } else {
+                    cajaSugerenciasDinamica.classList.add('d-none');
                 }
             });
+        }
+
+        document.addEventListener('click', (e) => {
+            const cajaSugerenciasDinamica = document.getElementById('sugerencias-menciones');
+            if (cajaSugerenciasDinamica && inputChat) {
+                if (e.target !== inputChat && e.target !== cajaSugerenciasDinamica && !cajaSugerenciasDinamica.contains(e.target)) {
+                    cajaSugerenciasDinamica.classList.add('d-none');
+                }
+            }
         });
+
+        // --- 5. NUEVAS FUNCIONES: ELIMINAR Y COPIAR ID ---
+        
+        // Función para copiar el ID al portapapeles
+        function copiarID(codigo) {
+            navigator.clipboard.writeText(codigo).then(() => {
+                alert("ID de tarea copiado: " + codigo); 
+            }).catch(err => {
+                console.error('Error al copiar: ', err);
+            });
+        }
+
+        // Función para eliminar tarea
+        function eliminarTarea(tareaId) {
+            if(confirm("¿Estás seguro de que deseas eliminar esta tarea? Esto no se puede deshacer.")) {
+                fetch(`/api/tarea/${tareaId}/eliminar/`, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': '{{ csrf_token }}',
+                        'Content-Type': 'application/json'
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if(data.status === 'success') {
+                        location.reload(); 
+                    } else {
+                        alert("Error al eliminar: " + data.mensaje);
+                    }
+                });
+            }
+        }
     </script>
+
+    <div id="sugerencias-menciones" class="list-group shadow d-none" style="position: fixed; z-index: 9999; max-height: 150px; overflow-y: auto; width: 220px; background-color: var(--kb-card-bg); border: 1px solid var(--kb-card-border);"></div>
 </body>
 </html>

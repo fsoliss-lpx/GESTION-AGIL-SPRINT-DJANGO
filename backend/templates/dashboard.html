@@ -8,7 +8,7 @@
     <style>
         body { background-color: #f4f6f9; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         
-        /* Sidebar estilo SaaS (Inspirado en tu referencia) */
+        /* Sidebar estilo SaaS */
         .sidebar {
             background-color: #1a253f; /* Azul noche oscuro */
             min-height: 100vh;
@@ -26,6 +26,7 @@
             color: #a0a5b1;
             padding: 12px 20px;
             transition: all 0.3s;
+            cursor: pointer;
         }
         .nav-link:hover, .nav-link.active {
             color: white;
@@ -52,6 +53,16 @@
             border-radius: 5px;
         }
         .btn-crear:hover { background-color: #0052a3; color: white; }
+
+        /* Animación para la burbuja de menciones */
+        .animate-pulse {
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.15); }
+            100% { transform: scale(1); }
+        }
     </style>
 </head>
 <body>
@@ -63,10 +74,21 @@
                 <div class="sidebar-brand">
                     <span style="color: #f5821f;">Gestión</span>Ágil
                 </div>
-                <ul class="nav flex-column">
+                <ul class="nav flex-column h-100">
                     <li class="nav-item">
                         <a class="nav-link active" href="{% url 'core:dashboard' %}">📊 Dashboard</a>
                     </li>
+                    
+                    <!-- Apartado interactivo de Menciones en la pestaña lateral -->
+                    <li class="nav-item">
+                        <a class="nav-link d-flex justify-content-between align-items-center" data-bs-toggle="offcanvas" data-bs-target="#panelMenciones">
+                            <span>🔔 Menciones</span>
+                            {% if menciones_count > 0 %}
+                                <span class="badge rounded-pill bg-danger animate-pulse" id="contador-menciones-burbuja">{{ menciones_count }}</span>
+                            {% endif %}
+                        </a>
+                    </li>
+
                     <li class="nav-item mt-auto">
                         <form method="post" action="{% url 'logout' %}" class="px-3 mt-5">
                             {% csrf_token %}
@@ -78,14 +100,24 @@
 
             <!-- CONTENIDO PRINCIPAL -->
             <div class="col-md-10 p-4">
+                <!-- Bloque de Mensajes de Django de Éxito / Error -->
+                {% if messages %}
+                    {% for message in messages %}
+                        <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags }}{% endif %} alert-dismissible fade show" role="alert">
+                            {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+
                 <div class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-3">
                     <h2 class="fw-bold" style="color: #1a253f;">Mis Proyectos</h2>
-                    <!-- Botón que abre el modal para crear proyecto -->
                     <button type="button" class="btn btn-crear px-4" data-bs-toggle="modal" data-bs-target="#modalCrearProyecto">
                         + Nuevo Proyecto
                     </button>
                 </div>
 
+                <!-- LISTA DE PROYECTOS VIGENTES -->
                 <div class="row">
                     {% for proyecto in proyectos %}
                     <div class="col-md-4 mb-4">
@@ -95,30 +127,65 @@
                                 <p class="card-text text-muted small mt-2">{{ proyecto.descripcion|truncatechars:80|default:"Sin descripción." }}</p>
                                 
                                 <div class="mt-4 d-flex justify-content-between align-items-center">
-                                    <span class="badge bg-light text-dark border">Creador: {{ proyecto.creador.username }}</span>
-                                    <a href="{% url 'core:detalle_proyecto' proyecto.id %}" class="btn btn-sm btn-outline-primary">Ver Equipo y Tablero →</a>
+                                    <span class="badge bg-light text-dark border small">PO: {{ proyecto.creador.username }}</span>
+                                    <div class="d-flex gap-2">
+                                        {% if proyecto.creador == request.user %}
+                                            <a href="{% url 'core:finalizar_proyecto' proyecto.id %}" class="btn btn-sm btn-outline-success" onclick="return confirm('¿Estás seguro de finalizar este proyecto? Se moverá permanentemente al historial.');" title="Finalizar Proyecto">🏁 Finalizar</a>
+                                        {% endif %}
+                                        <a href="{% url 'core:detalle_proyecto' proyecto.id %}" class="btn btn-sm btn-outline-primary">Ver Equipo →</a>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
                     {% empty %}
                     <div class="col-12 text-center py-5">
-                        <h5 class="text-muted">Aún no tienes proyectos asignados.</h5>
+                        <h5 class="text-muted">Aún no tienes proyectos asignados en curso.</h5>
                         <p class="text-muted small">Crea uno nuevo para empezar a trabajar con tu equipo.</p>
                     </div>
                     {% endfor %}
                 </div>
+
+                <!-- SECCIÓN: HISTORIAL DE PROYECTOS FINALIZADOS / ARCHIVADOS -->
+                <div class="mt-5 pt-4 border-top">
+                    <h3 class="fw-bold mb-4" style="color: #6c757d;">📁 Historial de Proyectos Finalizados</h3>
+                    <div class="row">
+                        {% for proyecto in proyectos_finalizados %}
+                        <div class="col-md-4 mb-4" style="opacity: 0.75;">
+                            <div class="card project-card h-100 p-3 bg-light border-secondary">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <h5 class="card-title fw-bold text-muted mb-0">{{ proyecto.nombre }}</h5>
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle small px-2">Completado</span>
+                                    </div>
+                                    <p class="card-text text-muted small mt-2">{{ proyecto.descripcion|truncatechars:80|default:"Sin descripción." }}</p>
+                                    
+                                    <div class="mt-4 d-flex justify-content-between align-items-center">
+                                        <span class="text-muted small">Modo Lectura</span>
+                                        <a href="{% url 'core:detalle_proyecto' proyecto.id %}" class="btn btn-sm btn-secondary opacity-75">Revisar Historial</a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% empty %}
+                        <div class="col-12 text-start">
+                            <p class="text-muted small fst-italic">No tienes proyectos archivados en el historial.</p>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
             </div>
 
         </div>
     </div>
 
-    <!-- MODAL: Crear Proyecto (Se abre al hacer clic en + Nuevo Proyecto) -->
+    <!-- MODAL: Crear Proyecto -->
     <div class="modal fade" id="modalCrearProyecto" tabindex="-1">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content border-0 shadow">
                 <div class="modal-header" style="background-color: #1a253f; color: white;">
-                    <h5 class="modal-title">Crear Nuevo Proyecto</h5>
+                    <h5 class="modal-title fw-bold">Crear Nuevo Proyecto</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <form method="post" action="{% url 'core:crear_proyecto' %}">
@@ -132,6 +199,16 @@
                             <label class="form-label fw-bold">Descripción (Opcional)</label>
                             <textarea class="form-control" name="descripcion" rows="3" placeholder="Breve objetivo del proyecto..."></textarea>
                         </div>
+                        <div class="row">
+                            <div class="col-6 mb-3">
+                                <label class="form-label fw-bold small">Fecha de Inicio</label>
+                                <input type="date" class="form-control" name="fecha_inicio">
+                            </div>
+                            <div class="col-6 mb-3">
+                                <label class="form-label fw-bold small">Fecha de Fin</label>
+                                <input type="date" class="form-control" name="fecha_fin">
+                            </div>
+                        </div>
                     </div>
                     <div class="modal-footer bg-light">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
@@ -142,7 +219,63 @@
         </div>
     </div>
 
-    <!-- Scripts de Bootstrap (Necesarios para el Modal) -->
+    <!-- PANEL DESPLEGABLE: CENTRO DE NOTIFICACIONES / MENCIONES -->
+    <div class="offcanvas offcanvas-start text-bg-dark" tabindex="-1" id="panelMenciones" style="width: 400px; background-color: #1a212d !important; border-right: 1px solid #2d3748;">
+        <div class="offcanvas-header border-bottom border-secondary">
+            <h5 class="offcanvas-title fw-bold">Centro de Notificaciones</h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+        </div>
+        <div class="offcanvas-body p-3">
+            <div id="contenedor-lista-menciones">
+                {% if menciones %}
+                    {% for mencion in menciones %}
+                        <div class="card border-0 mb-3 p-3 shadow-sm card-mencion-item" data-id="{{ mencion.id }}" style="background-color: #242f41; transition: 0.2s; cursor: pointer;">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <span class="fw-bold text-warning small">@{{ mencion.autor_mencion.username }}</span>
+                                <span class="text-muted" style="font-size: 0.75rem;">{{ mencion.created_at|date:"d/m H:i" }}</span>
+                            </div>
+                            <p class="mb-2 text-white-50 small">Te ha mencionado en la tarea: <strong class="text-white">{{ mencion.tarea.titulo }}</strong></p>
+                            <div class="d-flex justify-content-between align-items-center pt-2 border-top border-secondary mt-1">
+                                <span class="badge bg-secondary" style="font-size: 0.7rem;">📁 {{ mencion.tarea.sprint.proyecto.nombre }}</span>
+                                <a href="{% url 'core:tablero' mencion.tarea.sprint.proyecto.id %}" class="btn btn-sm btn-outline-warning py-0 px-2 fw-semibold btn-ir-tablero" style="font-size: 0.75rem;">Ir al Tablero →</a>
+                            </div>
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="text-center py-5 text-muted">
+                        <p class="fs-4 mb-1">😎</p>
+                        <p class="small">Estás al día. No tienes menciones pendientes.</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts de Bootstrap y Lógica AJAX -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const contenedorMenciones = document.getElementById('contenedor-lista-menciones');
+
+            if (contenedorMenciones) {
+                contenedorMenciones.addEventListener('click', (e) => {
+                    const btnIr = e.target.closest('.btn-ir-tablero');
+                    const tarjetaMencion = e.target.closest('.card-mencion-item');
+                    
+                    if (btnIr && tarjetaMencion) {
+                        const mencionId = tarjetaMencion.getAttribute('data-id');
+                        
+                        // Enviamos la petición en segundo plano para marcar como leído antes de ir a la URL
+                        fetch(`/api/notificacion/${mencionId}/leer/`, {
+                            method: 'POST',
+                            headers: {
+                                'X-CSRFToken': '{{ csrf_token }}'
+                            }
+                        });
+                    }
+                });
+            }
+        });
+    </script>
 </body>
 </html>

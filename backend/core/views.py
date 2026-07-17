@@ -1,12 +1,14 @@
 import json
+import re
 from django.shortcuts import render, redirect, get_object_or_404
+from django.db import models 
 from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.http import JsonResponse
-
-from .models import Tarea, Proyecto, MiembroProyecto, Usuario
+from .models import Tarea, Proyecto, MiembroProyecto, Usuario, Sprint, Evidencia, Notificacion
 from .forms import RegistroUsuarioForm
+
 
 def registro(request):
     """Vista para que nuevos usuarios creen su cuenta y entren al sistema."""
@@ -23,27 +25,46 @@ def registro(request):
 
 @login_required
 def dashboard(request):
-    """Vista del panel de proyectos estilo SaaS."""
-    proyectos_creados = Proyecto.objects.filter(creador=request.user, is_active=True)
-    
-    ids_proyectos_miembro = MiembroProyecto.objects.filter(usuario=request.user, is_active=True).values_list('proyecto_id', flat=True)
-    proyectos_miembro = Proyecto.objects.filter(id__in=ids_proyectos_miembro, is_active=True)
-    
-    proyectos = (proyectos_creados | proyectos_miembro).distinct()
-    return render(request, 'dashboard.html', {'proyectos': proyectos})
+    """Vista principal del panel de control con separación de proyectos."""
+    # Proyectos base del usuario
+    proyectos_base = Proyecto.objects.filter(
+        models.Q(creador=request.user) | models.Q(miembros__usuario=request.user),
+        is_active=True
+    ).distinct()
+
+    # SEPARACIÓN: Vigentes vs Finalizados
+    proyectos_vigentes = proyectos_base.filter(es_finalizado=False)
+    proyectos_finalizados = proyectos_base.filter(es_finalizado=True)
+
+    menciones = Notificacion.objects.filter(
+        usuario_mencionado=request.user,
+        leido=False
+    ).select_related('autor_mencion', 'tarea__sprint__proyecto')
+
+    context = {
+        'proyectos': proyectos_vigentes,
+        'proyectos_finalizados': proyectos_finalizados,
+        'menciones': menciones,
+        'menciones_count': menciones.count(),
+    }
+    return render(request, 'dashboard.html', context)
 
 @login_required
 def crear_proyecto(request):
-    """Vista para registrar un nuevo proyecto y asignar al creador como PO."""
+    """Vista para registrar un nuevo proyecto incluyendo fechas de inicio y fin."""
     if request.method == 'POST':
         nombre = request.POST.get('nombre')
         descripcion = request.POST.get('descripcion')
+        fecha_inicio = request.POST.get('fecha_inicio') or None
+        fecha_fin = request.POST.get('fecha_fin') or None
         
         if nombre:
             nuevo_proyecto = Proyecto.objects.create(
                 nombre=nombre, 
                 descripcion=descripcion, 
-                creador=request.user
+                creador=request.user,
+                fecha_inicio=fecha_inicio,
+                fecha_fin=fecha_fin
             )
             MiembroProyecto.objects.create(
                 proyecto=nuevo_proyecto,
@@ -52,11 +73,11 @@ def crear_proyecto(request):
             )
             return redirect('core:dashboard')
             
-    return render(request, 'crear_proyecto.html')
+    return redirect('core:dashboard')
 
 @login_required
 def detalle_proyecto(request, proyecto_id):
-    """Vista para gestionar el equipo del proyecto."""
+    """Vista para gestionar el equipo del proyecto y lanzar tareas automatizadas de bienvenida."""
     proyecto = get_object_or_404(Proyecto, id=proyecto_id)
     
     if not MiembroProyecto.objects.filter(proyecto=proyecto, usuario=request.user, is_active=True).exists():
@@ -75,6 +96,40 @@ def detalle_proyecto(request, proyecto_id):
                     defaults={'rol': rol_asignado}
                 )
                 messages.success(request, f"¡Usuario {usuario_invitado.username} agregado exitosamente como {rol_asignado}!")
+
+               # --- LÓGICA AUTOMÁTICA: Inducción Unificada ---
+                if usuario_invitado != request.user:
+                    sprint = Sprint.objects.filter(proyecto=proyecto, is_active=True).first()
+                    if not sprint:
+                        sprint = Sprint.objects.create(proyecto=proyecto, nombre="Sprint 1", is_active=True)
+                    
+                    # Buscamos si ya existe la HU de Inducción. Si no, la creamos UNA SOLA VEZ.
+                    tarea_bienvenida, created = Tarea.objects.get_or_create(
+                        sprint=sprint,
+                        titulo="HU-0: Lineamientos del Proyecto",
+                        defaults={
+                            'descripcion': "Espacio central para lineamientos generales del proyecto.",
+                            'proposito': "Mantener a todos los miembros informados.",
+                            'estado': 'Por Hacer',
+                            'responsable': request.user # Se asigna al creador por defecto
+                        }
+                    )
+
+                    # Creamos un mensaje automático en el chat de esa tarea mencionando al nuevo
+                    texto_bienvenida = f"¡Bienvenido al equipo @{usuario_invitado.username}! Revisa los lineamientos."
+                    Evidencia.objects.create(
+                        tarea=tarea_bienvenida,
+                        autor=request.user,
+                        comentario=texto_bienvenida
+                    )
+                    
+                    # Disparamos la notificación
+                    Notificacion.objects.create(
+                        usuario_mencionado=usuario_invitado,
+                        autor_mencion=request.user,
+                        tarea=tarea_bienvenida
+                    )
+                
             except Usuario.DoesNotExist:
                 messages.error(request, "Error: No existe ningún usuario registrado con ese correo.")
         
@@ -87,8 +142,12 @@ def detalle_proyecto(request, proyecto_id):
 def tablero_kanban(request, proyecto_id):
     """Vista principal que renderiza el tablero Kanban del proyecto."""
     proyecto = get_object_or_404(Proyecto, id=proyecto_id)
-    
     tareas = Tarea.objects.filter(sprint__proyecto=proyecto, is_active=True)
+    sprints = Sprint.objects.filter(proyecto=proyecto, is_active=True)
+    miembros = proyecto.miembros.filter(is_active=True).select_related('usuario')
+    
+    # Lista limpia de Python con las cadenas de los nombres de usuario
+    miembros_lista = [m.usuario.username for m in miembros]
     
     context = {
         'proyecto': proyecto,
@@ -96,8 +155,23 @@ def tablero_kanban(request, proyecto_id):
         'en_progreso': tareas.filter(estado='En Progreso'),
         'en_revision': tareas.filter(estado='En revisión'),
         'terminado': tareas.filter(estado='Terminado'),
+        'sprints': sprints,
+        'miembros': miembros,
+        'miembros_json': miembros_lista, # <-- Mapeo directo y seguro para el json_script
     }
     return render(request, 'kanban.html', context)
+
+@login_required
+def crear_sprint(request, proyecto_id):
+    proyecto = get_object_or_404(Proyecto, id=proyecto_id)
+    if request.method == 'POST' and proyecto.creador == request.user:
+        Sprint.objects.create(
+            proyecto=proyecto, 
+            nombre=request.POST.get('nombre'),
+            fecha_inicio=request.POST.get('fecha_inicio'),
+            fecha_fin=request.POST.get('fecha_fin')
+        )
+    return redirect('core:detalle_proyecto', proyecto_id=proyecto.id)
 
 @login_required
 def actualizar_estado_tarea(request):
@@ -106,57 +180,142 @@ def actualizar_estado_tarea(request):
         try:
             data = json.loads(request.body)
             tarea = Tarea.objects.get(id=data['tarea_id'])
-            tarea.estado = data['estado'] # Sincronizado con Javascript
+            tarea.estado = data['estado']
             tarea.save()
             return JsonResponse({'status': 'success', 'mensaje': 'Actualizado correctamente'})
         except Exception as e:
             return JsonResponse({'status': 'error', 'mensaje': str(e)}, status=400)
     return JsonResponse({'status': 'error'}, status=400)
 
-# backend/core/views.py (Agrega al final)
-
 @login_required
 def detalle_tarea_api(request, tarea_id):
-    """API para obtener detalles de la tarea y su historial de chat/evidencias."""
+    """Retorna toda la información de la tarea, incluyendo criterios y archivos adjuntos."""
     tarea = get_object_or_404(Tarea, id=tarea_id)
-    evidencias = Evidencia.objects.filter(tarea=tarea).select_related('autor').order_by('created_at')
+    evidencias = Evidencia.objects.filter(tarea=tarea).order_by('created_at')
+    lista = [{
+        'autor': e.autor.username, 
+        'texto': e.comentario or "", 
+        'archivo_url': e.archivo.url if e.archivo else None, 
+        'archivo_nombre': e.archivo.name.split('/')[-1] if e.archivo else None, 
+        'fecha': e.created_at.strftime("%d/%m %H:%M")
+    } for e in evidencias]
     
-    lista_mensajes = []
-    for ev in evidencias:
-        # Extraemos el texto de la evidencia sin importar cómo se llame el campo
-        texto = getattr(ev, 'comentario', getattr(ev, 'descripcion', getattr(ev, 'texto', '')))
-        lista_mensajes.append({
-            'autor': ev.autor.username,
-            'texto': texto,
-            'fecha': ev.created_at.strftime("%d/%m %H:%M")
-        })
-
     return JsonResponse({
         'id': tarea.id,
         'titulo': tarea.titulo,
-        'descripcion': getattr(tarea, 'descripcion', 'Sin descripción detallada.'),
+        'descripcion': tarea.descripcion or 'Sin descripción detallada.',
+        'proposito': tarea.proposito or 'Sin propósito definido.',
+        'criterios_aceptacion': tarea.criterios_aceptacion or 'Sin criterios de aceptación.',
         'responsable': tarea.responsable.username if tarea.responsable else 'Sin asignar',
-        'mensajes': lista_mensajes
+        'mensajes': lista
     })
 
 @login_required
 def agregar_evidencia_api(request, tarea_id):
-    """API para guardar un nuevo mensaje en la tarea."""
+    """Procesa textos y archivos subidos como evidencia y genera notificaciones por mención."""
     if request.method == 'POST':
-        data = json.loads(request.body)
         tarea = get_object_or_404(Tarea, id=tarea_id)
-        texto_mensaje = data.get('texto', '').strip()
+        texto_mensaje = request.POST.get('texto', '').strip()
+        archivo = request.FILES.get('archivo')
         
-        if texto_mensaje:
-            # Intentamos guardar el mensaje detectando el nombre de tu columna
-            try:
-                Evidencia.objects.create(tarea=tarea, autor=request.user, comentario=texto_mensaje)
-            except TypeError:
-                try:
-                    Evidencia.objects.create(tarea=tarea, autor=request.user, descripcion=texto_mensaje)
-                except TypeError:
-                    Evidencia.objects.create(tarea=tarea, autor=request.user, texto=texto_mensaje)
-                    
-            return JsonResponse({'status': 'success'})
+        if texto_mensaje or archivo:
+            # 1. Crear la evidencia normal
+            evidencia = Evidencia.objects.create(
+                tarea=tarea,
+                autor=request.user,
+                comentario=texto_mensaje,
+                archivo=archivo
+            )
             
+            # 2. Analizar si hay menciones con @ en el texto
+            if texto_mensaje:
+                # Busca palabras que inicien con @ (ej: @jair, @maria)
+                candidatos_mencion = re.findall(r'@(\w+)', texto_mensaje)
+                
+                for username in candidatos_mencion:
+                    try:
+                        # Buscamos si el usuario mencionado existe
+                        usuario_mencionado = Usuario.objects.get(username__iexact=username)
+                        
+                        # Evitamos notificarnos a nosotros mismos
+                        if usuario_mencionado != request.user:
+                            Notificacion.objects.create(
+                                usuario_mencionado=usuario_mencionado,
+                                autor_mencion=request.user,
+                                tarea=tarea
+                            )
+                    except Usuario.DoesNotExist:
+                        # Si escribieron un @ que no es usuario real, lo ignoramos de forma segura
+                        continue
+                        
+            return JsonResponse({'status': 'success'})
     return JsonResponse({'status': 'error'}, status=400)
+
+@login_required
+def crear_tarea(request, proyecto_id):
+    """Vista para procesar el formulario incluyendo Propósitos y Criterios de Aceptación."""
+    proyecto = get_object_or_404(Proyecto, id=proyecto_id)
+
+    if request.method == 'POST':
+        titulo = request.POST.get('titulo')
+        sprint_id = request.POST.get('sprint')
+        responsable_id = request.POST.get('responsable')
+
+        if titulo and sprint_id:
+            sprint = get_object_or_404(Sprint, id=sprint_id, proyecto=proyecto)
+            responsable = None
+            if responsable_id:
+                responsable = Usuario.objects.get(id=responsable_id)
+
+            nueva_tarea = Tarea.objects.create(
+                titulo=titulo,
+                descripcion=request.POST.get('descripcion'),
+                proposito=request.POST.get('proposito'),
+                criterios_aceptacion=request.POST.get('criterios_aceptacion'),
+                sprint=sprint,
+                responsable=responsable,
+                estado='Por Hacer'
+            )
+            
+            # NUEVO: Si se asignó a alguien más, le notificamos automáticamente
+            if responsable and responsable != request.user:
+                Notificacion.objects.create(
+                    usuario_mencionado=responsable,
+                    autor_mencion=request.user,
+                    tarea=nueva_tarea
+                )
+            
+    return redirect('core:tablero', proyecto_id=proyecto.id)
+
+@login_required
+def marcar_notificacion_leida_api(request, notificacion_id):
+    """Marca una mención específica como leída."""
+    if request.method == 'POST':
+        notificacion = get_object_or_404(Notificacion, id=notificacion_id, usuario_mencionado=request.user)
+        notificacion.leido = True
+        notificacion.save()
+        return JsonResponse({'status': 'success'})
+    return JsonResponse({'status': 'error'}, status=400)
+
+@login_required
+def eliminar_tarea_api(request, tarea_id):
+    """Permite al creador del proyecto eliminar una tarea."""
+    if request.method == 'POST':
+        tarea = get_object_or_404(Tarea, id=tarea_id)
+        if tarea.sprint.proyecto.creador == request.user:
+            tarea.delete()
+            return JsonResponse({'status': 'success'})
+        return JsonResponse({'status': 'error', 'mensaje': 'No tienes permisos'}, status=403)
+    return JsonResponse({'status': 'error'}, status=400)
+
+@login_required
+def finalizar_proyecto(request, proyecto_id):
+    """Permite al creador archivar/finalizar un proyecto."""
+    proyecto = get_object_or_404(Proyecto, id=proyecto_id)
+    if proyecto.creador == request.user:
+        proyecto.es_finalizado = True
+        proyecto.save()
+        messages.success(request, f"El proyecto '{proyecto.nombre}' ha sido finalizado con éxito.")
+    else:
+        messages.error(request, "No tienes permisos para finalizar este proyecto.")
+    return redirect('core:dashboard')

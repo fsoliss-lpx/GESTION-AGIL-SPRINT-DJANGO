@@ -23,13 +23,13 @@
                 <p class="text-white-50 mt-1 mb-0">{{ proyecto.descripcion|default:"Sin descripción" }}</p>
             </div>
             <!-- BOTÓN PARA IR AL TABLERO KANBAN -->
-            <a href="{% url 'core:tablero' proyecto.id %}" class="btn btn-naranja px-4 py-2">Abrir Tablero Kanban 🚀</a>
+            <a href="{% url 'core:tablero' proyecto.id %}" class="btn btn-naranja px-4 py-2">Abrir Tablero Kanban </a>
         </div>
     </div>
 
     <div class="container">
         
-        <!-- ALERTAS (Mensajes de éxito o error al agregar correos) -->
+        <!-- ALERTAS (Mensajes de éxito o error) -->
         {% if messages %}
             {% for message in messages %}
                 <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}success{% endif %} alert-dismissible fade show">
@@ -40,12 +40,42 @@
         {% endif %}
 
         <div class="row">
-            <!-- COLUMNA IZQUIERDA: Formulario para agregar (Solo visible para el creador) -->
+            
+            <!-- COLUMNA IZQUIERDA: Gestión (Solo visible para el creador) -->
             {% if proyecto.creador == request.user %}
-            <div class="col-md-4 mb-4">
+            <div class="col-md-5 mb-4">
+                
+                <!-- Formulario: Crear Sprint -->
+                <div class="card border-0 shadow-sm mb-4">
+                    <div class="card-header bg-white fw-bold py-3 text-primary">
+                        + Crear nuevo Sprint
+                    </div>
+                    <div class="card-body">
+                        <form method="post" action="{% url 'core:crear_sprint' proyecto.id %}">
+                            {% csrf_token %}
+                            <div class="mb-3">
+                                <label class="form-label small text-muted">Nombre del Sprint</label>
+                                <input type="text" name="nombre" class="form-control" placeholder="Ej: Sprint 1 - Core" required>
+                            </div>
+                            <div class="row">
+                                <div class="col-6 mb-3">
+                                    <label class="form-label small text-muted">Fecha Inicio</label>
+                                    <input type="date" name="fecha_inicio" class="form-control" required>
+                                </div>
+                                <div class="col-6 mb-3">
+                                    <label class="form-label small text-muted">Fecha Fin</label>
+                                    <input type="date" name="fecha_fin" class="form-control" required>
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-naranja w-100">Crear Sprint</button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Formulario: Agregar Miembro -->
                 <div class="card border-0 shadow-sm">
                     <div class="card-header bg-white fw-bold py-3">
-                        + Agregar Miembro
+                        + Agregar Miembro al Equipo
                     </div>
                     <div class="card-body">
                         <form method="post">
@@ -62,18 +92,20 @@
                                     <option value="DEV" selected>Desarrollador</option>
                                 </select>
                             </div>
-                            <button type="submit" class="btn btn-naranja w-100">Invitar al equipo</button>
+                            <button type="submit" class="btn btn-outline-dark w-100">Invitar al equipo</button>
                         </form>
                     </div>
                 </div>
+
             </div>
             {% endif %}
 
             <!-- COLUMNA DERECHA: Lista de Miembros -->
-            <div class="col-md-{% if proyecto.creador == request.user %}8{% else %}12{% endif %}">
+            <div class="col-md-{% if proyecto.creador == request.user %}7{% else %}12{% endif %} mb-4">
                 <div class="card border-0 shadow-sm">
-                    <div class="card-header bg-white fw-bold py-3">
-                        Equipo de Trabajo ({{ miembros.count }})
+                    <div class="card-header bg-white fw-bold py-3 d-flex justify-content-between align-items-center">
+                        <span>Equipo de Trabajo</span>
+                        <span class="badge bg-secondary rounded-pill">{{ miembros.count }}</span>
                     </div>
                     <div class="card-body p-0">
                         <ul class="list-group list-group-flush">
